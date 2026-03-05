@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Мои заказы — Somon Market</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+    <style>
+        :root{--bg:#0b0b0f;--card:#151519;--accent:#00ff88;--muted:#9aa0a6}
+        body{background:var(--bg);color:#fff;font-family:Inter,system-ui,Arial;margin:0;padding:18px}
+        h1{font-size:20px;background:linear-gradient(90deg,var(--accent),#b026ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+        .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .card{background:var(--card);border-radius:12px;padding:12px;box-shadow:0 6px 24px rgba(0,0,0,0.6)}
+        .order{padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);margin-bottom:8px}
+        .meta{color:var(--muted);font-size:13px}
+        .btn{background:var(--accent);color:#000;padding:8px 10px;border-radius:8px;border:none;cursor:pointer}
+        .small{font-size:13px;color:var(--muted)}
+    </style>
+</head>
+<body>
+    <h1>Мои заказы</h1>
+    <div class="cols">
+        <div class="card">
+            <h3>Я купил</h3>
+            {% if bought %}
+                {% for o in bought %}
+                <div class="order" id="order-buy-{{ o.id }}">
+                    <div><strong>{{ o.product_title }}</strong> — {{ o.amount_tjs }} TJS</div>
+                    <div class="meta">Продавец: {{ o.seller_username or o.seller_telegram_id }} — Статус: {{ o.status }}</div>
+                    {% if o.credentials %}
+                    <div style="margin-top:8px;background:#0a0a0d;padding:8px;border-radius:6px;font-family:monospace">{{ o.credentials }}</div>
+                    {% endif %}
+                    <div style="margin-top:8px"><button class="btn" onclick="onLeaveReview({{ o.id }}, {{ o.seller_user_id }}, 'buy')">Оставить отзыв</button></div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="small">Пока нет покупок.</div>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <h3>Я продал</h3>
+            {% if sold %}
+                {% for o in sold %}
+                <div class="order" id="order-sell-{{ o.id }}">
+                    <div><strong>{{ o.product_title }}</strong> — {{ o.amount_tjs }} TJS</div>
+                    <div class="meta">Покупатель: {{ o.buyer_username or o.buyer_telegram_id }} — Статус: {{ o.status }}</div>
+                    <div style="margin-top:8px"><button class="btn" onclick="onLeaveReview({{ o.id }}, {{ o.buyer_user_id }}, 'sell')">Оставить отзыв покупателю</button></div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="small">Пока нет продаж.</div>
+            {% endif %}
+        </div>
+    </div>
+
+<script>
+// SSE for live updates
+const es = new EventSource('/api/stream');
+es.onmessage = function(evt){
+    const data = evt.data;
+    console.log('SSE:', data);
+    // Simple handling: if review_added or product_approved/rejected, refresh minimal UI or highlight
+    if(data.startsWith('review_added:')){
+        // Optionally request new rating, but for now show notification
+        const userId = data.split(':')[1];
+        alert('Новый отзыв обновил рейтинг пользователя '+userId);
+    }
+    if(data.startsWith('product_approved:')){
+        const pid = data.split(':')[1];
+        alert('Товар #' + pid + ' опубликован');
+    }
+    if(data.startsWith('product_rejected:')){
+        const pid = data.split(':')[1];
+        alert('Товар #' + pid + ' отклонён');
+    }
+}
+
+async function onLeaveReview(orderId, revieweeUserId, direction){
+    const stars = prompt('Оценка (1-5):');
+    if(!stars) return;
+    const text = prompt('Комментарий (необязательно):');
+    const payload = {
+        order_id: orderId,
+        reviewer_user_id: 0, // заменить реальным user_id при интеграции
+        reviewee_user_id: revieweeUserId,
+        rating: Number(stars),
+        comment: text
+    };
+    try{
+        const res = await fetch('/api/reviews',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const j = await res.json();
+        if(j.ok) alert('Спасибо! Отзыв добавлен.'); else alert('Ошибка: '+JSON.stringify(j));
+    }catch(e){
+        alert('Network error');
+    }
+}
+</script>
+</body>
+</html>

