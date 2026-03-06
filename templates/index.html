@@ -118,6 +118,42 @@
     /* chat-room overlay */
     html:not(.dark) #chatRoomOverlay             { background:#f8fafc !important; }
     html:not(.dark) #chatMessages                { background:#f1f5f9 !important; }
+
+    /* sticky page sub-headers (bg-[#0f0f0f]/95 bg-slate-800 etc) */
+    html:not(.dark) .sticky.border-b.backdrop-blur-xl { background:rgba(241,245,249,.97) !important; border-color:#e2e8f0 !important; color:#0f172a !important; }
+    html:not(.dark) .sticky.border-b.backdrop-blur-xl h2 { color:#0f172a !important; }
+
+    /* buy-button / sell-button sticky bars */
+    html:not(.dark) .sticky.bottom-\[72px\] .rounded-2xl,
+    html:not(.dark) .sticky.bottom-6 .rounded-2xl     { background:rgba(255,255,255,.97) !important; border-color:#e2e8f0 !important; }
+
+    /* dark-bg product gallery placeholders */
+    html:not(.dark) #productGallery .rounded-2xl      { background:#e2e8f0 !important; border-color:#cbd5e1 !important; }
+
+    /* secret data block (bg-slate-900) */
+    html:not(.dark) .rounded-2xl.bg-slate-900         { background:#f8fafc !important; color:#0f172a !important; border-color:#e2e8f0 !important; }
+    html:not(.dark) .rounded-2xl.bg-slate-900 textarea { background:#f1f5f9 !important; border-color:#cbd5e1 !important; color:#0f172a !important; }
+    html:not(.dark) .rounded-2xl.bg-slate-900 p       { color:#334155 !important; }
+
+    /* profileWithdrawBtn / balanceWithdrawBtn (bg-slate-900) */
+    html:not(.dark) button.bg-slate-900               { background:#475569 !important; color:#ffffff !important; }
+    html:not(.dark) button.bg-slate-900:hover         { background:#334155 !important; }
+
+    /* order thumbnail placeholder (bg-slate-800) */
+    html:not(.dark) .h-16.w-20.rounded-xl             { background:#e2e8f0 !important; border-color:#cbd5e1 !important; }
+
+    /* aside border-b border-gray-800 */
+    html:not(.dark) aside .border-b                   { border-color:#e2e8f0 !important; }
+
+    /* upload label bg-gray-900 */
+    html:not(.dark) label#addItemCoverLabel           { background:#f1f5f9 !important; border-color:#94a3b8 !important; color:#475569 !important; }
+
+    /* search dropdown */
+    html:not(.dark) #searchDropdown                   { background:#ffffff !important; border-color:#e2e8f0 !important; }
+    html:not(.dark) #searchDropdownList .divide-y     { border-color:#e2e8f0 !important; }
+
+    /* profile page last-purchase stub (static text) */
+    html:not(.dark) #openPurchasedItemBtn             { background:#ffffff !important; }
   </style>
 </head>
 <body class="min-h-screen bg-[#0f0f0f] dark-body text-slate-900 dark:text-slate-100 transition-all duration-300">
@@ -1629,6 +1665,7 @@
           console.error('authTelegramBtn login error:', error);
         }
         finalizeAuthSuccess();
+        if (currentUserId) { _notifsLoaded = false; loadNotifications(); }
       });
 
       // Авто-логин через TG при открытии сайта в WebApp
@@ -2461,6 +2498,12 @@
             name: userName,
             picture: userAvatar,
             sub: userSub,
+          }).then(() => {
+            // После регистрации currentUserId установлен — перезагружаем уведомления и профиль
+            if (currentUserId) {
+              _notifsLoaded = false;
+              loadNotifications();
+            }
           });
           showToast(`✅ Успешный вход через Google: ${userName}`, 'success');
         } catch (error) {
@@ -2564,7 +2607,7 @@
           if (!user?.email || !user?.name) {
             return;
           }
-          await fetch(`${API_BASE_URL}/api/auth/google`, {
+          const response = await fetch(`${API_BASE_URL}/api/auth/google`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -2574,6 +2617,12 @@
               sub: user.sub || null,
             })
           });
+          if (response.ok) {
+            const backendUser = await response.json();
+            currentUserId = backendUser?.id ?? null;
+            applyUserBalance(Number(backendUser?.balance || 0));
+            loadUserProfileStats(backendUser);
+          }
         } catch (error) {
           console.error('registerGoogleUser error:', error);
         }
@@ -2596,6 +2645,8 @@
           isLoggedIn = true;
           updateProfileFromTelegram(user);
           await registerTelegramUser(user);
+          // После авторизации сразу загружаем уведомления (значок)
+          if (currentUserId) { _notifsLoaded = false; loadNotifications(); }
         } catch (error) {
           console.error('initTelegramAutoAuth error:', error);
           showToast('Ошибка соединения с сервером', 'error');

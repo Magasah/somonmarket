@@ -628,6 +628,47 @@ def auth_telegram(payload: UserCreate, db: Session = Depends(get_db)) -> UserRes
     return user
 
 
+class GoogleUserCreate(BaseModel):
+    email: str
+    name: str
+    picture: str | None = None
+    sub: str | None = None
+
+
+@app.post("/api/auth/google", response_model=UserResponse)
+def auth_google(payload: GoogleUserCreate, db: Session = Depends(get_db)) -> UserResponse:
+    """Sync Google-login user into local DB and return profile.
+    Uses sub (Google UID) hashed as synthetic tg_id to avoid collisions."""
+    if not payload.email:
+        raise HTTPException(status_code=400, detail="Email required")
+
+    # Build a stable synthetic tg_id from Google sub: use hash-based negative int
+    raw_sub = payload.sub or payload.email
+    synthetic_tg_id = -(abs(hash(raw_sub)) % (10 ** 12))
+
+    user = db.query(User).filter(User.tg_id == synthetic_tg_id).first()
+    if user is None:
+        username = (payload.name or payload.email).replace(" ", "")[:150]
+        user = User(
+            tg_id=synthetic_tg_id,
+            username=username,
+            balance=0.0,
+            role="USER",
+            is_active=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        new_username = (payload.name or payload.email).replace(" ", "")[:150]
+        if new_username and user.username != new_username:
+            user.username = new_username
+            db.commit()
+            db.refresh(user)
+
+    return user
+
+
 @app.post("/api/items", response_model=ItemResponse)
 def create_item(payload: ItemCreate, db: Session = Depends(get_db)) -> ItemResponse:
     """Create a new marketplace item."""
