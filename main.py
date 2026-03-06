@@ -12,7 +12,10 @@ import logging
 import os
 import secrets
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+import urllib.request as _urllib_request
+import json as _json_mod
+
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -71,6 +74,8 @@ class User(Base):
     kyc_status: Mapped[str] = mapped_column(String(20), default="none")  # none | pending | approved | rejected
     kyc_photo_path: Mapped[str | None] = mapped_column(String(300), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    referral_code: Mapped[str | None] = mapped_column(String(16), nullable=True, unique=True)
+    referred_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class Item(Base):
@@ -332,6 +337,11 @@ def ensure_users_table_columns() -> None:
         if "created_at" not in columns:
             conn.execute(text("ALTER TABLE users ADD COLUMN created_at DATETIME"))
             conn.execute(text("UPDATE users SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
+
+        if "referral_code" not in columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN referral_code VARCHAR(16)"))
+        if "referred_by" not in columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN referred_by INTEGER"))
 
 
 def ensure_items_table_columns() -> None:
@@ -870,7 +880,7 @@ def get_user_by_id(user_id: int, db: Session = Depends(get_db)) -> dict:
 # ── Orders ──────────────────────────────────────────────────────────────────────
 
 @app.post("/api/orders", response_model=OrderResponse)
-def create_order(payload: OrderCreate, db: Session = Depends(get_db)) -> OrderResponse:
+def create_order(payload: OrderCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> OrderResponse:
     """Buyer purchases an item. Deducts balance, marks item SOLD, copies secret_data."""
     item = db.query(Item).filter(Item.id == payload.item_id, Item.status == "ACTIVE").first()
     if item is None:
@@ -908,6 +918,17 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)) -> OrderRe
     db.add(order)
     db.commit()
     db.refresh(order)
+    # Notify seller and buyer via Telegram (fire-and-forget)
+    if seller and seller.tg_id:
+        background_tasks.add_task(
+            _telegram_notify, seller.tg_id,
+            f"💰 *Продан товар!*\n\n«{item.title}»\nПокупатель оплатил {item.price:.0f} TJS\nВам начислено {item.price * 0.95:.0f} TJS после подтверждения."
+        )
+    if buyer.tg_id:
+        background_tasks.add_task(
+            _telegram_notify, buyer.tg_id,
+            f"✅ *Покупка оформлена!*\n\n«{item.title}»\nСумма: {item.price:.0f} TJS\nОткройте маркетплейс чтобы подтвердить получение."
+        )
     return order
 
 
@@ -931,7 +952,7 @@ def get_seller_orders(seller_id: int, db: Session = Depends(get_db)) -> list[Ord
 
 
 @app.post("/api/orders/{order_id}/confirm")
-def confirm_order(order_id: int, buyer_id: int, db: Session = Depends(get_db)) -> dict:
+def confirm_order(order_id: int, buyer_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> dict:
     """Buyer confirms order received — marks COMPLETED."""
     order = db.query(Order).filter(Order.id == order_id, Order.buyer_id == buyer_id).first()
     if order is None:
@@ -941,6 +962,15 @@ def confirm_order(order_id: int, buyer_id: int, db: Session = Depends(get_db)) -
     order.status = "COMPLETED"
     order.confirmed_at = datetime.utcnow()
     db.commit()
+    # Notify seller that funds are confirmed
+    seller = db.query(User).filter(User.id == order.seller_id).first()
+    if seller and seller.tg_id:
+        item = db.query(Item).filter(Item.id == order.item_id).first()
+        background_tasks.add_task(
+            _telegram_notify, seller.tg_id,
+            f"✅ *Сделка завершена!*\n\n«{item.title if item else 'Товар'}»\n"
+            f"Покупатель подтвердил получение.\nВам начислено {order.price * 0.95:.0f} TJS."
+        )
     return {"ok": True, "status": "COMPLETED"}
 
 
@@ -1075,7 +1105,125 @@ def admin_stats(db: Session = Depends(get_db)) -> dict:
     }
 
 
+# ── Telegram notify helper (fire-and-forget, no new deps) ──────────────────────
+
+def _telegram_notify(tg_id: int, text: str) -> None:
+    """Send a Telegram message to a user via Bot API (synchronous, background task)."""
+    token = os.getenv("BOT_TOKEN", "")
+    if not token or not tg_id:
+        return
+    try:
+        data = _json_mod.dumps({"chat_id": tg_id, "text": text, "parse_mode": "Markdown"}).encode()
+        req = _urllib_request.Request(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        _urllib_request.urlopen(req, timeout=5)
+    except Exception as exc:
+        logger.warning("Telegram notify failed for tg_id=%s: %s", tg_id, exc)
+
+
+# ── Transaction history ───────────────────────────────────────────────────────
+
+@app.get("/api/users/{user_id}/history")
+def get_user_history(user_id: int, db: Session = Depends(get_db)) -> list:
+    """Return transaction history: purchases + completed sales + approved topups."""
+    events: list[dict] = []
+
+    # Покупки (пользователь — покупатель)
+    for o in db.query(Order).filter(Order.buyer_id == user_id).all():
+        item = db.query(Item).filter(Item.id == o.item_id).first()
+        events.append({
+            "title": f"Покупка: {item.title if item else 'Товар'}",
+            "method": "Somon Market",
+            "amount": -round(o.price, 2),
+            "status": "Успешно",
+            "statusType": "success",
+            "type": "expense",
+            "date": o.created_at.isoformat() if getattr(o, "created_at", None) else "",
+        })
+
+    # Продажи (пользователь — продавец, заказ завершён)
+    for o in db.query(Order).filter(Order.seller_id == user_id, Order.status == "COMPLETED").all():
+        item = db.query(Item).filter(Item.id == o.item_id).first()
+        ts = getattr(o, "confirmed_at", None) or getattr(o, "created_at", None)
+        events.append({
+            "title": f"Продажа: {item.title if item else 'Товар'}",
+            "method": "Somon Market",
+            "amount": round(o.price * 0.95, 2),
+            "status": "Начислено",
+            "statusType": "success",
+            "type": "income",
+            "date": ts.isoformat() if ts else "",
+        })
+
+    # Одобренные пополнения
+    for d in db.query(BalanceDeposit).filter(
+        BalanceDeposit.user_id == user_id, BalanceDeposit.status == "approved"
+    ).all():
+        events.append({
+            "title": "Пополнение баланса",
+            "method": "Квитанция",
+            "amount": round(d.amount, 2),
+            "status": "Успешно",
+            "statusType": "success",
+            "type": "income",
+            "date": d.created_at.isoformat() if getattr(d, "created_at", None) else "",
+        })
+
+    events.sort(key=lambda e: e["date"], reverse=True)
+    return events
+
+
+# ── Referral system ───────────────────────────────────────────────────────────
+
+class ReferralUsePayload(BaseModel):
+    code: str
+
+
+@app.get("/api/users/{user_id}/referral")
+def get_referral_info(user_id: int, db: Session = Depends(get_db)) -> dict:
+    """Return or generate user's referral code + stats."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.referral_code:
+        user.referral_code = secrets.token_hex(6).upper()  # 12-char hex
+        db.commit()
+    invited_count = db.query(User).filter(User.referred_by == user_id).count()
+    return {
+        "referral_code": user.referral_code,
+        "invited_count": invited_count,
+        "bonus_per_invite": 20,
+        "new_user_bonus": 10,
+    }
+
+
+@app.post("/api/referral/use")
+def use_referral(user_id: int, payload: ReferralUsePayload, db: Session = Depends(get_db)) -> dict:
+    """Apply referral code: +20 TJS to referrer, +10 TJS to new user."""
+    code = payload.code.strip().upper()
+    referrer = db.query(User).filter(User.referral_code == code).first()
+    if referrer is None:
+        raise HTTPException(status_code=404, detail="Referral code not found")
+    if referrer.id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot use your own referral code")
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.referred_by is not None:
+        raise HTTPException(status_code=400, detail="Referral code already used")
+    user.referred_by = referrer.id
+    user.balance = round(user.balance + 10, 2)
+    referrer.balance = round(referrer.balance + 20, 2)
+    db.commit()
+    return {"ok": True, "bonus": 10}
+
+
 if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+

@@ -1818,15 +1818,7 @@
       const SUBCATS_MOBILE = ['Аккаунты','Валюта','Буст','Пропуски','Услуги'];
       const SUBCATS_APPS   = ['Подписки','Аккаунты','Ключи','Сервисы'];
 
-      const balanceTransactions = [
-        { title: 'Покупка: PUBG Аккаунт 70 lvl',   method: 'Dushanbe City', amount: -99,  status: 'Успешно',   statusType: 'success', type: 'expense', date: '2026-03-03T16:40:00' },
-        { title: 'Пополнение баланса',               method: 'Alif Mobi',    amount: 300,  status: 'Успешно',   statusType: 'success', type: 'income',  date: '2026-03-03T10:12:00' },
-        { title: 'Покупка: CS2 Prime 1500h',         method: 'Alif Mobi',    amount: -49,  status: 'Успешно',   statusType: 'success', type: 'expense', date: '2026-03-02T20:15:00' },
-        { title: 'Возврат по спору',                 method: 'Dushanbe City', amount: 99,  status: 'Возврат',   statusType: 'refund',  type: 'refund',  date: '2026-03-01T11:00:00' },
-        { title: 'Пополнение баланса',               method: 'Корти Милли',  amount: 200,  status: 'Успешно',   statusType: 'success', type: 'income',  date: '2026-02-27T14:22:00' },
-        { title: 'Покупка: Free Fire 10 000 алмазов', method: 'Alif Mobi',  amount: -150,  status: 'Успешно',   statusType: 'success', type: 'expense', date: '2026-02-23T19:10:00' },
-        { title: 'Продажа: Rust Аккаунт',            method: 'Системa',      amount: 420,  status: 'Начислено', statusType: 'success', type: 'income',  date: '2026-02-20T08:55:00' },
-      ];
+      let balanceTransactions = [];
 
       const toastContainer = document.getElementById('toastContainer');
       let selectedTopupMethod = 'Alif Mobi';
@@ -2289,6 +2281,19 @@
         }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
         renderBalanceHistory(filtered);
+      }
+
+      async function loadBalanceHistory() {
+        if (!currentUserId) return;
+        try {
+          const res = await fetch(`/api/users/${currentUserId}/history`);
+          if (res.ok) {
+            balanceTransactions = await res.json();
+          }
+        } catch (e) {
+          console.warn('loadBalanceHistory error:', e);
+        }
+        applyBalanceFilter();
       }
 
       function renderCatalog(items) {
@@ -3156,6 +3161,7 @@
           loadChatList();
         }
         if (pageId === 'page-my-items') loadMyItems();
+        if (pageId === 'page-balance') loadBalanceHistory();
         if (pageId === 'page-order') startAutoConfirmTimer(Date.now() + 48 * 3600 * 1000);
         if (pageId === 'page-favorites') renderFavoritesPage();
         if (pageId === 'page-notifications') loadNotifications();

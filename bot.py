@@ -338,6 +338,43 @@ async def notify_admin(text: str, photo_base64: str = None) -> None:
     except Exception as exc:
         logger.exception("notify_admin error: %s", exc)
 
+
+async def notify_user(tg_id: int, text: str) -> None:
+    """Send a notification message to a specific user by their Telegram ID."""
+    if _bot is None:
+        logger.warning("notify_user skipped: bot not initialized")
+        return
+    try:
+        await _bot.send_message(chat_id=tg_id, text=text, parse_mode="Markdown")
+    except Exception as exc:
+        logger.warning("notify_user failed for tg_id=%s: %s", tg_id, exc)
+
+
+# /ref -------------------------------------------------------------------------
+@router.message(Command("ref"))
+async def ref_handler(message: Message) -> None:
+    uid = message.from_user.id
+    bot_info = await message.bot.get_me()
+    bot_username = bot_info.username or ""
+    ref_link = f"https://t.me/{bot_username}?start=ref_{uid}"
+    if get_lang(uid) == "tj":
+        text = (
+            f"🎁 *Дӯсти худро даъват кунед!*\n\n"
+            f"Ҳар нафаре ки тавассути истиноди шумо сабт мешавад:\n"
+            f"• Дӯсти шумо +10 TJS мегирад\n"
+            f"• Шумо +20 TJS мегиред\n\n"
+            f"🔗 Истиноди шумо:\n`{ref_link}`"
+        )
+    else:
+        text = (
+            f"🎁 *Пригласите друга!*\n\n"
+            f"За каждого приглашённого пользователя:\n"
+            f"• Ваш друг получает +10 TJS\n"
+            f"• Вы получаете +20 TJS\n\n"
+            f"🔗 Ваша реферальная ссылка:\n`{ref_link}`"
+        )
+    await message.answer(text, parse_mode="Markdown")
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 async def main() -> None:
     global _bot
@@ -352,6 +389,7 @@ async def main() -> None:
     await _bot.set_my_commands([
         BotCommand(command="start",   description="🎮 Кушодани Somon Market"),
         BotCommand(command="lang",    description="🌐 Иваз кардани забон / Сменить язык"),
+        BotCommand(command="ref",     description="🎁 Реферальная ссылка / Истиноди реферал"),
         BotCommand(command="help",    description="📋 Рӯйхати амрҳо"),
         BotCommand(command="support", description="🆘 Дастгирӣ"),
         BotCommand(command="admin",   description="🛡 Панели маъмур"),
