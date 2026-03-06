@@ -183,6 +183,7 @@ class UserResponse(BaseModel):
     kyc_status: str = "none"
     sales_count: int = 0
     avg_rating: float | None = None
+    created_at: datetime | None = None
 
 
 class ItemCreate(BaseModel):
@@ -891,6 +892,7 @@ def get_user_by_tg(tg_id: int, db: Session = Depends(get_db)) -> dict:
         "kyc_status": user.kyc_status,
         "sales_count": sales_count,
         "avg_rating": avg_rating,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
     }
 
 
@@ -915,6 +917,7 @@ def get_user_by_id(user_id: int, db: Session = Depends(get_db)) -> dict:
         "kyc_status": user.kyc_status,
         "sales_count": sales_count,
         "avg_rating": avg_rating,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
     }
 
 

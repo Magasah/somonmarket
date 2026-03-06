@@ -60,6 +60,7 @@
       border-left: 3px solid #3b82f6;
       padding-left: calc(0.75rem - 3px) !important;
     }
+    html:not(.dark) .nav-btn-active { color:#2563eb !important; background:rgba(37,99,235,0.08) !important; }
     /* ── Активный пункт меню (мобильный нижний) ────────────────── */
     .nav-btn-active-mobile { color: #60a5fa !important; }
     .nav-btn-active-mobile i { filter: drop-shadow(0 0 4px #3b82f640); }
@@ -764,8 +765,8 @@
             <div class="flex-1 min-w-0">
               <p id="profileName" class="font-bold text-base">Magasahix</p>
               <p id="profileEmail" class="hidden text-xs text-slate-500 dark:text-slate-400 mt-0.5">email@example.com</p>
-              <p class="text-sm text-amber-500">⭐ 5.0 • 100+ продаж</p>
-              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">на Somon Market с марта 2026</p>
+              <p id="profileRatingInline" class="text-sm text-amber-500">⭐ — • 0 продаж</p>
+              <p id="profileMemberSince" class="text-xs text-slate-500 dark:text-slate-400 mt-1">на Somon Market</p>
             </div>
             <!-- Колокольчик уведомлений — только на мобильном (md:hidden) -->
             <button type="button" data-page="page-notifications" data-guard="1" class="nav-btn md:hidden relative shrink-0 h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-blue-500 transition-colors">
@@ -821,9 +822,9 @@
           <button id="openSettingsBtn" class="w-full text-left px-4 py-3">⚙️ Настройки</button>
         </div>
 
-        <button id="openPurchasedItemBtn" class="w-full rounded-2xl p-3 bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-700 text-left">
+        <button id="openPurchasedItemBtn" class="w-full rounded-2xl p-3 bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-700 text-left hidden">
           <p class="text-xs text-slate-500 dark:text-slate-400">Последняя покупка</p>
-          <p class="text-sm font-semibold mt-1">PUBG Conqueror Account • Нажмите, чтобы открыть заказ</p>
+          <p id="lastPurchaseTitle" class="text-sm font-semibold mt-1">—</p>
         </button>
       </section>
 
@@ -1669,13 +1670,14 @@
       });
 
       // Авто-логин через TG при открытии сайта в WebApp
-      (function tgAutoLogin() {
+      (async function tgAutoLogin() {
         const user = tg?.initDataUnsafe?.user;
         if (user && !isLoggedIn) {
           try {
             updateProfileFromTelegram(user);
-            registerTelegramUser(user).catch(() => {});
+            await registerTelegramUser(user);
             finalizeAuthSuccess();
+            if (currentUserId) { _notifsLoaded = false; loadNotifications(); }
           } catch(_) {}
         }
       })();
@@ -2597,9 +2599,52 @@
         const ratingEl  = document.getElementById('profileRating');
         const salesEl   = document.getElementById('profileSalesCount');
         const verifiedEl = document.getElementById('profileVerifiedBadge');
-        if (ratingEl)   ratingEl.textContent   = user.avg_rating != null ? Number(user.avg_rating).toFixed(1) : '—';
-        if (salesEl)    salesEl.textContent    = user.sales_count ?? 0;
-        if (verifiedEl) verifiedEl.textContent = user.kyc_status === 'approved' ? '✓' : '—';
+        const ratingInline = document.getElementById('profileRatingInline');
+        const memberSince = document.getElementById('profileMemberSince');
+        const ratingStr = user.avg_rating != null ? Number(user.avg_rating).toFixed(1) : '—';
+        const salesStr  = user.sales_count ?? 0;
+        if (ratingEl)    ratingEl.textContent    = ratingStr;
+        if (salesEl)     salesEl.textContent     = salesStr;
+        if (verifiedEl)  verifiedEl.textContent  = user.kyc_status === 'approved' ? '✓' : '—';
+        if (ratingInline) ratingInline.textContent = `⭐ ${ratingStr} • ${salesStr} продаж`;
+        if (memberSince && user.created_at) {
+          try {
+            const d = new Date(user.created_at);
+            memberSince.textContent = 'на Somon Market с ' + d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+          } catch(_) {}
+        }
+      }
+
+      async function refreshProfilePage() {
+        if (!currentUserId) return;
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/users/${currentUserId}`);
+          if (res.ok) {
+            const userData = await res.json();
+            applyUserBalance(Number(userData.balance || 0));
+            loadUserProfileStats(userData);
+          }
+          // Загружаем последнюю покупку
+          const oRes = await fetch(`${API_BASE_URL}/api/orders/buyer/${currentUserId}`);
+          if (oRes.ok) {
+            const orders = await oRes.json();
+            const lastOrder = orders[0];
+            const btn = document.getElementById('openPurchasedItemBtn');
+            const titleEl = document.getElementById('lastPurchaseTitle');
+            if (lastOrder && btn && titleEl) {
+              titleEl.textContent = `Заказ #${lastOrder.id} • ${lastOrder.status === 'COMPLETED' ? 'Завершён' : lastOrder.status === 'PAID' ? 'Оплачен' : lastOrder.status}`;
+              btn.classList.remove('hidden');
+              btn.onclick = () => {
+                window._orderDetailOpened = true;
+                window._viewingOrder = lastOrder;
+                switchPage('page-order-details');
+                document.getElementById('orderDetailsTitle').textContent = `Заказ #${lastOrder.id}`;
+                document.getElementById('purchasesListView')?.classList.add('hidden');
+                document.getElementById('orderDetailView')?.classList.remove('hidden');
+              };
+            }
+          }
+        } catch(_) {}
       }
 
       async function registerGoogleUser(user) {
@@ -3213,6 +3258,7 @@
         }
         if (pageId === 'page-my-items') loadMyItems();
         if (pageId === 'page-balance') loadBalanceHistory();
+        if (pageId === 'page-profile') refreshProfilePage();
         if (pageId === 'page-order') startAutoConfirmTimer(Date.now() + 48 * 3600 * 1000);
         if (pageId === 'page-favorites') renderFavoritesPage();
         if (pageId === 'page-notifications') loadNotifications();
@@ -3600,7 +3646,7 @@
             <button type="button" class="purchase-item-btn w-full rounded-2xl p-3 bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-700 text-left flex items-center gap-3 hover:border-blue-500 transition-colors" data-order-id="${o.id}">
               <div class="h-12 w-12 rounded-xl bg-slate-200 dark:bg-slate-700 shrink-0 flex items-center justify-center text-xl">🎮</div>
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-semibold truncate">Заказ #${o.id} — ${escapeHTML(String(o.item_id || ''))}</p>
+                <p class="text-sm font-semibold truncate">Заказ #${o.id}</p>
                 <p class="text-xs text-slate-400 mt-0.5">${new Date(o.created_at).toLocaleDateString('ru-RU')}</p>
               </div>
               <div class="shrink-0">
