@@ -139,6 +139,33 @@ class BalanceDeposit(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class ChatMessage(Base):
+    """Chat message for buyer ↔ seller communication within an order."""
+
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    order_id: Mapped[int] = mapped_column(Integer, ForeignKey("orders.id"), index=True)
+    sender_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), index=True)
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class WithdrawRequest(Base):
+    """Withdrawal request from seller balance to external account."""
+
+    __tablename__ = "withdrawals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), index=True)
+    amount: Mapped[float] = mapped_column(Float)
+    target: Mapped[str] = mapped_column(String(300))
+    method: Mapped[str] = mapped_column(String(100), default="Alif Mobi")
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | approved | rejected
+    admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class HealthResponse(BaseModel):
     """Health check response schema."""
 
@@ -227,6 +254,7 @@ class OrderResponse(BaseModel):
     price: float
     status: str
     secret_data: str = ""
+    item_title: str = ""
     created_at: datetime | None = None
 
 
@@ -254,11 +282,14 @@ class ReviewResponse(BaseModel):
 class DepositCreate(BaseModel):
     user_id: int
     amount: float = Field(..., gt=0, le=100_000)
-    receipt_base64: str  # data:image/jpeg;base64,...
+    method: str = "Alif Mobi"
+    receipt_base64: str | None = None
 
     @field_validator("receipt_base64")
     @classmethod
-    def validate_base64(cls, v: str) -> str:
+    def validate_base64(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
         raw = v.split(",", 1)[1] if "," in v else v
         try:
             _b64.b64decode(raw, validate=True)
@@ -275,6 +306,51 @@ class DepositResponse(BaseModel):
     amount: float
     status: str
     created_at: datetime
+
+
+# ── Chat schemas ──────────────────────────────────────────────
+class ChatMessageCreate(BaseModel):
+    sender_id: int
+    text: str = Field(..., min_length=1, max_length=2000)
+
+
+class ChatMessageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    order_id: int
+    sender_id: int
+    text: str
+    created_at: datetime | None = None
+
+
+# ── Withdraw schemas ────────────────────────────────────────────
+class WithdrawCreate(BaseModel):
+    user_id: int
+    amount: float = Field(..., gt=0, le=100_000)
+    target: str = Field(..., min_length=5, max_length=300)
+    method: str = "Alif Mobi"
+
+
+class WithdrawResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    amount: float
+    target: str
+    method: str
+    status: str
+    created_at: datetime
+
+
+# ── Item edit schema ─────────────────────────────────────────────
+class ItemEdit(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    price: float | None = None
+    secret_data: str | None = None
+    status: str | None = None
 
 
 app = FastAPI(title="Somon Market API")
@@ -529,6 +605,35 @@ def ensure_orders_table() -> None:
 ensure_orders_table()
 
 
+def ensure_extra_tables() -> None:
+    """Create chat_messages and withdrawals tables if not exist."""
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id INTEGER NOT NULL REFERENCES orders(id),
+                sender_id INTEGER NOT NULL REFERENCES users(id),
+                text TEXT NOT NULL DEFAULT '',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS withdrawals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                amount FLOAT NOT NULL,
+                target VARCHAR(300) NOT NULL DEFAULT '',
+                method VARCHAR(100) NOT NULL DEFAULT 'Alif Mobi',
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                admin_note TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+
+
+ensure_extra_tables()
+
+
 @app.get("/", response_class=HTMLResponse)
 def serve_index(request: Request) -> HTMLResponse:
     """Serve the SPA — main entry point for Telegram WebApp and browsers."""
@@ -689,12 +794,18 @@ def create_item(payload: ItemCreate, db: Session = Depends(get_db)) -> ItemRespo
 
 
 @app.get("/api/items", response_model=list[ItemResponse])
-def get_items(game_category: str | None = None, db: Session = Depends(get_db)) -> list[ItemResponse]:
-    """Return active marketplace items with optional category filter."""
+def get_items(
+    game_category: str | None = None,
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+) -> list[ItemResponse]:
+    """Return active marketplace items with optional category filter and pagination."""
+    limit = min(max(limit, 1), 200)
     query = db.query(Item).filter(Item.status == "ACTIVE")
     if game_category:
         query = query.filter(Item.game_category == game_category)
-    return query.order_by(Item.id.desc()).all()
+    return query.order_by(Item.id.desc()).offset(skip).limit(limit).all()
 
 
 @app.get("/api/items/{item_id}", response_model=ItemResponse)
@@ -946,7 +1057,7 @@ def create_order(payload: OrderCreate, background_tasks: BackgroundTasks, db: Se
     # Credit seller (minus 5% commission)
     seller = db.query(User).filter(User.id == item.seller_id).first()
     if seller:
-        seller.balance += round(item.price * 0.95, 2)
+        seller.balance += round(item.price * 0.90, 2)
 
     # Mark item sold
     item.status = "SOLD"
@@ -976,10 +1087,25 @@ def create_order(payload: OrderCreate, background_tasks: BackgroundTasks, db: Se
     return order
 
 
-@app.get("/api/orders/buyer/{buyer_id}", response_model=list[OrderResponse])
-def get_buyer_orders(buyer_id: int, db: Session = Depends(get_db)) -> list[OrderResponse]:
-    """Return all orders for a buyer."""
-    return db.query(Order).filter(Order.buyer_id == buyer_id).order_by(Order.id.desc()).all()
+@app.get("/api/orders/buyer/{buyer_id}")
+def get_buyer_orders(buyer_id: int, db: Session = Depends(get_db)) -> list[dict]:
+    """Return all orders for a buyer, including item title."""
+    orders = db.query(Order).filter(Order.buyer_id == buyer_id).order_by(Order.id.desc()).all()
+    result = []
+    for o in orders:
+        item = db.query(Item).filter(Item.id == o.item_id).first()
+        result.append({
+            "id": o.id,
+            "buyer_id": o.buyer_id,
+            "item_id": o.item_id,
+            "seller_id": o.seller_id,
+            "price": o.price,
+            "status": o.status,
+            "secret_data": o.secret_data,
+            "item_title": item.title if item else "",
+            "created_at": o.created_at.isoformat() if o.created_at else None,
+        })
+    return result
 
 
 @app.get("/api/orders/seller/{seller_id}", response_model=list[OrderResponse])
@@ -1013,7 +1139,7 @@ def confirm_order(order_id: int, buyer_id: int, background_tasks: BackgroundTask
         background_tasks.add_task(
             _telegram_notify, seller.tg_id,
             f"✅ *Сделка завершена!*\n\n«{item.title if item else 'Товар'}»\n"
-            f"Покупатель подтвердил получение.\nВам начислено {order.price * 0.95:.0f} TJS."
+            f"Покупатель подтвердил получение.\nВам начислено {order.price * 0.90:.0f} TJS."
         )
     return {"ok": True, "status": "COMPLETED"}
 
@@ -1264,6 +1390,264 @@ def use_referral(user_id: int, payload: ReferralUsePayload, db: Session = Depend
     referrer.balance = round(referrer.balance + 20, 2)
     db.commit()
     return {"ok": True, "bonus": 10}
+
+
+# ── Deposits API ───────────────────────────────────────────────
+
+@app.post("/api/deposits", response_model=DepositResponse)
+def create_deposit(payload: DepositCreate, db: Session = Depends(get_db)) -> DepositResponse:
+    """Create a deposit request with receipt screenshot for admin approval."""
+    user = db.query(User).filter(User.id == payload.user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    fpath: str | None = None
+    if payload.receipt_base64:
+        import base64 as _b64x
+        try:
+            raw = payload.receipt_base64
+            if "," in raw:
+                raw = raw.split(",", 1)[1]
+            img_bytes = _b64x.b64decode(raw)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid base64 image")
+
+        os.makedirs("uploads/receipts", exist_ok=True)
+        fname = f"dep_{payload.user_id}_{int(datetime.utcnow().timestamp())}.jpg"
+        fpath = f"uploads/receipts/{fname}"
+        with open(fpath, "wb") as f:
+            f.write(img_bytes)
+
+    deposit = BalanceDeposit(
+        user_id=payload.user_id,
+        amount=payload.amount,
+        receipt_path=fpath or "",
+        admin_note=payload.method,
+        status="pending",
+    )
+    db.add(deposit)
+    db.commit()
+    db.refresh(deposit)
+    return deposit
+
+
+@app.get("/api/admin/deposits")
+def admin_get_deposits(
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_admin),
+) -> list:
+    """Admin: list all deposit requests."""
+    deposits = db.query(BalanceDeposit).order_by(BalanceDeposit.id.desc()).limit(100).all()
+    result = []
+    for d in deposits:
+        user = db.query(User).filter(User.id == d.user_id).first()
+        result.append({
+            "id": d.id,
+            "user_id": d.user_id,
+            "username": user.username if user else "—",
+            "amount": d.amount,
+            "method": d.admin_note or "—",
+            "status": d.status.upper(),
+            "receipt_b64": None,  # stored on disk, not returned as b64
+            "receipt_url": f"/{d.receipt_path}" if d.receipt_path else None,
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+        })
+    return result
+
+
+@app.post("/api/admin/deposits/{deposit_id}/approve")
+def admin_approve_deposit(
+    deposit_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_admin),
+) -> dict:
+    """Admin: approve deposit and credit user balance."""
+    dep = db.query(BalanceDeposit).filter(BalanceDeposit.id == deposit_id).first()
+    if dep is None:
+        raise HTTPException(status_code=404, detail="Deposit not found")
+    if dep.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Deposit already {dep.status}")
+    user = db.query(User).filter(User.id == dep.user_id).first()
+    if user:
+        user.balance = round(user.balance + dep.amount, 2)
+    dep.status = "approved"
+    db.commit()
+    return {"ok": True, "new_balance": user.balance if user else None}
+
+
+@app.post("/api/admin/deposits/{deposit_id}/reject")
+def admin_reject_deposit(
+    deposit_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_admin),
+) -> dict:
+    """Admin: reject deposit request."""
+    dep = db.query(BalanceDeposit).filter(BalanceDeposit.id == deposit_id).first()
+    if dep is None:
+        raise HTTPException(status_code=404, detail="Deposit not found")
+    dep.status = "rejected"
+    db.commit()
+    return {"ok": True}
+
+
+# ── Chat API ────────────────────────────────────────────────
+
+@app.get("/api/chat/{order_id}/messages")
+def get_chat_messages(order_id: int, db: Session = Depends(get_db)) -> list:
+    """Return messages for an order chat."""
+    msgs = db.query(ChatMessage).filter(
+        ChatMessage.order_id == order_id
+    ).order_by(ChatMessage.created_at.asc()).limit(200).all()
+    result = []
+    for m in msgs:
+        sender = db.query(User).filter(User.id == m.sender_id).first()
+        result.append({
+            "id": m.id,
+            "order_id": m.order_id,
+            "sender_id": m.sender_id,
+            "sender_name": sender.username if sender else "?",
+            "text": m.text,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+        })
+    return result
+
+
+@app.post("/api/chat/{order_id}/messages", response_model=ChatMessageResponse)
+def post_chat_message(
+    order_id: int,
+    payload: ChatMessageCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> ChatMessageResponse:
+    """Post a message to an order chat."""
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if payload.sender_id not in (order.buyer_id, order.seller_id):
+        raise HTTPException(status_code=403, detail="Not a party to this order")
+
+    msg = ChatMessage(order_id=order_id, sender_id=payload.sender_id, text=payload.text[:2000])
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+
+    other_id = order.seller_id if payload.sender_id == order.buyer_id else order.buyer_id
+    other = db.query(User).filter(User.id == other_id).first()
+    sender = db.query(User).filter(User.id == payload.sender_id).first()
+    if other and getattr(other, "tg_id", None):
+        item = db.query(Item).filter(Item.id == order.item_id).first()
+        background_tasks.add_task(
+            _telegram_notify, other.tg_id,
+            f"ð¬ *Новое сообщение* от @{sender.username if sender else '?'}\n«{payload.text[:100]}»\n\nЗаказ #{order_id}: {item.title if item else '—'}"
+        )
+    return msg
+
+
+# ── Withdrawals API ───────────────────────────────────────────
+
+@app.post("/api/withdrawals")
+def create_withdrawal(payload: WithdrawCreate, db: Session = Depends(get_db)) -> dict:
+    """Submit a withdrawal request. Deducts balance immediately."""
+    user = db.query(User).filter(User.id == payload.user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.balance < payload.amount:
+        raise HTTPException(status_code=402, detail="Insufficient balance")
+
+    user.balance = round(user.balance - payload.amount, 2)
+    req = WithdrawRequest(
+        user_id=payload.user_id,
+        amount=payload.amount,
+        target=payload.target,
+        method=payload.method,
+        status="pending",
+    )
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    return {"ok": True, "id": req.id, "status": "pending", "balance": user.balance}
+
+
+@app.get("/api/admin/withdrawals")
+def admin_get_withdrawals(
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_admin),
+) -> list:
+    """Admin: list all withdrawal requests."""
+    reqs = db.query(WithdrawRequest).order_by(WithdrawRequest.id.desc()).limit(100).all()
+    result = []
+    for r in reqs:
+        user = db.query(User).filter(User.id == r.user_id).first()
+        result.append({
+            "id": r.id,
+            "user_id": r.user_id,
+            "username": user.username if user else "—",
+            "amount": r.amount,
+            "target": r.target,
+            "method": r.method,
+            "status": r.status,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
+    return result
+
+
+@app.post("/api/admin/withdrawals/{req_id}/approve")
+def admin_approve_withdrawal(
+    req_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_admin),
+) -> dict:
+    """Admin: approve withdrawal — balance already deducted."""
+    req = db.query(WithdrawRequest).filter(WithdrawRequest.id == req_id).first()
+    if req is None:
+        raise HTTPException(status_code=404, detail="Withdrawal not found")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Already {req.status}")
+    req.status = "approved"
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/admin/withdrawals/{req_id}/reject")
+def admin_reject_withdrawal(
+    req_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_admin),
+) -> dict:
+    """Admin: reject withdrawal and refund balance."""
+    req = db.query(WithdrawRequest).filter(WithdrawRequest.id == req_id).first()
+    if req is None:
+        raise HTTPException(status_code=404, detail="Withdrawal not found")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Already {req.status}")
+    req.status = "rejected"
+    user = db.query(User).filter(User.id == req.user_id).first()
+    if user:
+        user.balance = round(user.balance + req.amount, 2)
+    db.commit()
+    return {"ok": True}
+
+
+# ── Edit item ────────────────────────────────────────────────
+
+@app.patch("/api/items/{item_id}")
+def edit_item(item_id: int, payload: ItemEdit, db: Session = Depends(get_db)) -> dict:
+    """Edit item fields (by owner seller)."""
+    item = db.query(Item).filter(Item.id == item_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if payload.title is not None and payload.title.strip():
+        item.title = payload.title.strip()[:200]
+    if payload.description is not None:
+        item.description = payload.description
+    if payload.price is not None and payload.price > 0:
+        item.price = payload.price
+    if payload.secret_data is not None:
+        item.secret_data = payload.secret_data
+    if payload.status in ("ACTIVE", "SOLD", "REMOVED"):
+        item.status = payload.status
+    db.commit()
+    return {"ok": True, "id": item.id}
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Somon Market</title>
-  <link rel="icon" href="/static/assets/icons/Roblox.png" type="image/png" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -822,6 +822,26 @@
           <button id="openSettingsBtn" class="w-full text-left px-4 py-3">⚙️ Настройки</button>
         </div>
 
+        <!-- Реферальная программа -->
+        <div id="profileReferralSection" class="rounded-2xl p-4 bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-blue-500/30">
+          <div class="flex items-center gap-2 mb-3">
+            <i class="fa-solid fa-gift text-blue-500"></i>
+            <p class="text-sm font-bold">Реферальная программа</p>
+          </div>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">Приглашайте друзей и получайте <span class="text-emerald-500 font-semibold">+20 TJS</span> за каждого. Новый пользователь получит <span class="text-blue-400 font-semibold">+10 TJS</span>.</p>
+          <div class="flex items-center gap-2 mb-3">
+            <div class="flex-1 rounded-xl px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-sm font-bold tracking-widest text-center" id="profileRefCode">—</div>
+            <button id="copyRefCodeBtn" type="button" class="shrink-0 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors">
+              <i class="fa-regular fa-copy"></i>
+            </button>
+          </div>
+          <p class="text-xs text-slate-400 mb-2">Приглашено: <span id="profileRefCount" class="font-semibold text-white">0</span> чел.</p>
+          <div class="flex gap-2" id="profileRefUseSection">
+            <input id="profileRefInput" type="text" placeholder="Реферальный код" maxlength="16" class="flex-1 rounded-xl px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none focus:ring-2 focus:ring-blue-500/40" />
+            <button id="profileRefSubmitBtn" type="button" class="shrink-0 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors">Применить</button>
+          </div>
+        </div>
+
         <button id="openPurchasedItemBtn" class="w-full rounded-2xl p-3 bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-700 text-left hidden">
           <p class="text-xs text-slate-500 dark:text-slate-400">Последняя покупка</p>
           <p id="lastPurchaseTitle" class="text-sm font-semibold mt-1">—</p>
@@ -1240,6 +1260,34 @@
           </div>
         </div>
 
+        <!-- Пополнения (Deposits) -->
+        <div class="rounded-2xl bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-emerald-500/30 overflow-hidden">
+          <div class="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+            <i class="fa-solid fa-money-bill-wave text-emerald-500"></i>
+            <h3 class="font-bold text-sm flex-1">💰 Заявки на пополнение</h3>
+            <button onclick="loadAdminDeposits()" type="button" class="text-xs px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-500">
+              <i class="fa-solid fa-rotate-right mr-1"></i>Обновить
+            </button>
+          </div>
+          <div id="adminDepositsList" class="divide-y divide-slate-100 dark:divide-slate-700/60 text-sm max-h-80 overflow-y-auto">
+            <div class="px-4 py-6 text-center text-slate-400 text-xs">Загрузка...</div>
+          </div>
+        </div>
+
+        <!-- Выводы (Withdrawals) -->
+        <div class="rounded-2xl bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-rose-500/30 overflow-hidden">
+          <div class="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+            <i class="fa-solid fa-arrow-up-from-bracket text-rose-500"></i>
+            <h3 class="font-bold text-sm flex-1">💸 Заявки на вывод</h3>
+            <button onclick="loadAdminWithdrawals()" type="button" class="text-xs px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-500">
+              <i class="fa-solid fa-rotate-right mr-1"></i>Обновить
+            </button>
+          </div>
+          <div id="adminWithdrawalsList" class="divide-y divide-slate-100 dark:divide-slate-700/60 text-sm max-h-80 overflow-y-auto">
+            <div class="px-4 py-6 text-center text-slate-400 text-xs">Загрузка...</div>
+          </div>
+        </div>
+
         <!-- Лог -->
         <div class="rounded-2xl bg-[#0f1117] border border-slate-700 p-4">
           <div class="flex items-center gap-2 mb-3">
@@ -1346,7 +1394,15 @@
           </div>
         </div>
 
-        <button type="submit" class="w-full rounded-xl py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center justify-center gap-2"><i class="fa-solid fa-bolt"></i> Перейти к оплате</button>
+        <div>
+          <label class="text-xs uppercase tracking-wide text-slate-400 mb-2 block">Чек / скриншот об оплате</label>
+          <label class="flex items-center gap-3 rounded-xl px-3 py-2.5 bg-slate-900 border border-slate-700 cursor-pointer hover:border-blue-500 transition-colors">
+            <i class="fa-solid fa-image text-slate-400"></i>
+            <span id="topupReceiptLabel" class="text-sm text-slate-400 truncate flex-1">Выбрать изображение…</span>
+            <input id="topupReceiptInput" type="file" accept="image/*" class="hidden" />
+          </label>
+        </div>
+        <button type="submit" class="w-full rounded-xl py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center justify-center gap-2"><i class="fa-solid fa-bolt"></i> Отправить заявку</button>
       </form>
     </div>
   </div>
@@ -2644,6 +2700,17 @@
               };
             }
           }
+          // Реферальная информация
+          try {
+            const rRes = await fetch(`${API_BASE_URL}/api/users/${currentUserId}/referral`);
+            if (rRes.ok) {
+              const rData = await rRes.json();
+              const codeEl = document.getElementById('profileRefCode');
+              if (codeEl) codeEl.textContent = rData.referral_code || '—';
+              const cntEl = document.getElementById('profileRefCount');
+              if (cntEl) cntEl.textContent = rData.invited_count ?? 0;
+            }
+          } catch(_) {}
         } catch(_) {}
       }
 
@@ -3595,6 +3662,38 @@
       profileWithdrawBtn?.addEventListener('click', openWithdrawOrKyc);
       balanceWithdrawBtn?.addEventListener('click', openWithdrawOrKyc);
 
+      // ── Referral code copy + apply ───────────────────────────────────────
+      document.getElementById('copyRefCodeBtn')?.addEventListener('click', () => {
+        const code = document.getElementById('profileRefCode')?.textContent?.trim();
+        if (!code || code === '—') return;
+        navigator.clipboard.writeText(code).then(
+          () => showToast('Реферальный код скопирован!', 'success'),
+          () => showToast('Не удалось скопировать', 'error')
+        );
+      });
+
+      document.getElementById('profileRefSubmitBtn')?.addEventListener('click', async () => {
+        if (!currentUserId) { showToast('Войдите в аккаунт', 'error'); return; }
+        const code = document.getElementById('profileRefInput')?.value?.trim().toUpperCase();
+        if (!code) { showToast('Введите реферальный код', 'error'); return; }
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/referral/use?user_id=${currentUserId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            showToast(`Реферальный код применён! +${data.bonus || 10} TJS`, 'success');
+            document.getElementById('profileRefUseSection')?.remove();
+            await refreshProfilePage();
+          } else {
+            const err = await res.json().catch(() => ({}));
+            showToast(err.detail || 'Ошибка применения кода', 'error');
+          }
+        } catch(_) { showToast('Ошибка соединения', 'error'); }
+      });
+
       chatRoomBackBtn?.addEventListener('click', closeChatRoom);
       chatRoomDisputeBtn?.addEventListener('click', () => {
         showToast('Спор открыт. Модератор скоро подключится', 'error');
@@ -3646,7 +3745,7 @@
             <button type="button" class="purchase-item-btn w-full rounded-2xl p-3 bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-700 text-left flex items-center gap-3 hover:border-blue-500 transition-colors" data-order-id="${o.id}">
               <div class="h-12 w-12 rounded-xl bg-slate-200 dark:bg-slate-700 shrink-0 flex items-center justify-center text-xl">🎮</div>
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-semibold truncate">Заказ #${o.id}</p>
+                <p class="text-sm font-semibold truncate">${o.item_title ? escapeHTML(o.item_title) : 'Заказ #' + o.id}</p>
                 <p class="text-xs text-slate-400 mt-0.5">${new Date(o.created_at).toLocaleDateString('ru-RU')}</p>
               </div>
               <div class="shrink-0">
@@ -3776,34 +3875,70 @@
         });
       });
 
+      // receipt file label update
+      document.getElementById('topupReceiptInput')?.addEventListener('change', (e) => {
+        const label = document.getElementById('topupReceiptLabel');
+        if (label) label.textContent = e.target.files[0]?.name || 'Выбрать изображение…';
+      });
+
       topupForm?.addEventListener('submit', async (event) => {
         event.preventDefault();
         const amount = Number(topupAmountInput?.value || 0);
         if (!amount || amount <= 0) { showToast('Введите сумму', 'error'); return; }
-        // Если есть currentUserId — реальный топап
-        if (currentUserId) {
-          try {
-            const res = await fetch(`${API_BASE_URL}/api/users/${currentUserId}/topup?amount=${amount}`, { method: 'POST' });
-            if (res.ok) {
-              const data = await res.json();
-              applyUserBalance(Number(data.balance || 0));
-              showToast(`Баланс пополнен на ${amount} TJS!`, 'success');
-            } else {
-              showToast('Ошибка пополнения', 'error');
-            }
-          } catch(_) { showToast('Ошибка соединения', 'error'); }
-        } else {
-          showToast('Запрос обрабатывается...', 'success');
+        if (!currentUserId) { showToast('Войдите в аккаунт', 'error'); return; }
+        const fileInput = document.getElementById('topupReceiptInput');
+        const file = fileInput?.files?.[0];
+        let receipt_b64 = null;
+        if (file) {
+          receipt_b64 = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.readAsDataURL(file);
+          });
         }
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/deposits`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: currentUserId, amount, method: selectedTopupMethod || 'Alif Mobi', receipt_base64: receipt_b64 })
+          });
+          if (res.ok) {
+            showToast('Заявка отправлена! Админ проверит и начислит баланс.', 'success');
+          } else {
+            const err = await res.json().catch(() => ({}));
+            showToast(err.detail || 'Ошибка отправки', 'error');
+          }
+        } catch(_) { showToast('Ошибка соединения', 'error'); }
         topupAmountInput.value = '';
+        if (fileInput) { fileInput.value = ''; }
+        const lbl = document.getElementById('topupReceiptLabel');
+        if (lbl) lbl.textContent = 'Выбрать изображение…';
         selectedTopupMethod = 'Alif Mobi';
         updateTopupMethodSelection();
         closeModal('modal-topup');
       });
 
-      withdrawForm?.addEventListener('submit', (event) => {
+      withdrawForm?.addEventListener('submit', async (event) => {
         event.preventDefault();
-        showToast('Запрос обрабатывается...', 'success');
+        const amount = Number(withdrawAmountInput?.value || 0);
+        const target = withdrawTargetInput?.value?.trim();
+        if (!amount || amount <= 0) { showToast('Введите сумму', 'error'); return; }
+        if (!target) { showToast('Укажите номер карты / телефона', 'error'); return; }
+        if (!currentUserId) { showToast('Войдите в аккаунт', 'error'); return; }
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/withdrawals`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: currentUserId, amount, target, method: 'Корти Милли' })
+          });
+          if (res.ok) {
+            showToast('Заявка на вывод создана! Средства забронированы.', 'success');
+            await refreshProfilePage();
+          } else {
+            const err = await res.json().catch(() => ({}));
+            showToast(err.detail || 'Ошибка вывода', 'error');
+          }
+        } catch(_) { showToast('Ошибка соединениъ', 'error'); }
         withdrawTargetInput.value = '';
         withdrawAmountInput.value = '';
         closeModal('modal-withdraw');
@@ -4514,14 +4649,15 @@
             const sym = getAvatarSymbol(o._role === 'buyer' ? 'Seller' : 'Buyer');
             const colorCls = o._role === 'buyer' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300';
             const dateStr = o.created_at ? new Date(o.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' }) : '';
-            return `<button type="button" onclick="openChatRoom('Заказ #${o.id}', 'Товар #${o.item_id || o.id}')" class="w-full rounded-2xl p-3 bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-700 flex items-center gap-3 text-left">
+            const chatTitle = o.item_title ? escapeHTML(o.item_title) : `Заказ #${o.id}`;
+            return `<button type="button" onclick="openChatRoom('${chatTitle.replace(/'/g,"\\'")}',' ${chatTitle.replace(/'/g,"\\'")}'  )" class="w-full rounded-2xl p-3 bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-700 flex items-center gap-3 text-left">
               <div class="h-12 w-12 rounded-full ${colorCls} flex items-center justify-center font-semibold text-lg shrink-0">${sym}</div>
               <div class="flex-1 min-w-0">
                 <div class="flex items-start justify-between gap-2">
-                  <p class="text-sm font-semibold truncate">Заказ #${o.id}</p>
+                  <p class="text-sm font-semibold truncate">${o.item_title ? escapeHTML(o.item_title) : 'Заказ #' + o.id}</p>
                   <span class="text-[11px] text-slate-500 dark:text-slate-400 shrink-0">${dateStr}</span>
                 </div>
-                <p class="text-xs text-slate-500 dark:text-slate-400 truncate">Товар #${o.item_id || '—'} • ${label}</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400 truncate">${o.item_title ? escapeHTML(o.item_title) : 'Товар #' + (o.item_id || '—')} • ${label}</p>
               </div>
             </button>`;
           }).join('');
@@ -4785,22 +4921,7 @@
       }
 
       // Подключить Face ID к кнопке вывода
-      document.getElementById('withdrawForm')?.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const faceIdRequired = document.getElementById('adminToggleFaceId')?.checked ?? true;
-        if (faceIdRequired) {
-          requireBiometric(
-            () => {
-              showToast('Биометрия подтверждена! Заявка на вывод создана.', 'success');
-              document.getElementById('modal-withdraw')?.classList.add('hidden');
-            },
-            null
-          );
-        } else {
-          showToast('Заявка на вывод создана', 'success');
-          document.getElementById('modal-withdraw')?.classList.add('hidden');
-        }
-      });
+      // withdrawForm listener is registered above (see topupForm section)
 
       // ════════════════════════════════════════════════════════════
       //  ADMIN PANEL
@@ -4984,6 +5105,10 @@
             kycList.innerHTML = '<div class="px-4 py-4 text-xs text-slate-400 text-center">KYC API недоступен</div>';
           }
 
+          // Deposits & Withdrawals
+          loadAdminDeposits();
+          loadAdminWithdrawals();
+
         } catch (err) {
           addAdminLog(`Error: ${err.message}`);
         }
@@ -5017,6 +5142,85 @@
           addAdminLog(`KYC rejected: user #${id}`);
           loadAdminData();
         } else { showToast('Ошибка', 'error'); }
+      };
+
+      // ── Admin Deposits ────────────────────────────────────────────────────
+      window.loadAdminDeposits = async () => {
+        const container = document.getElementById('adminDepositsList');
+        if (!container) return;
+        container.innerHTML = '<div class="px-4 py-4 text-center text-slate-400 text-xs">Загрузка...</div>';
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/admin/deposits`);
+          if (!res.ok) { container.innerHTML = '<div class="px-4 py-4 text-center text-rose-400 text-xs">Ошибка загрузки</div>'; return; }
+          const items = await res.json();
+          if (!items.length) { container.innerHTML = '<div class="px-4 py-4 text-center text-slate-400 text-xs">Нет заявок</div>'; return; }
+          const statusLabel = { PENDING: '⏳ Ожидает', APPROVED: '✅ Одобрен', REJECTED: '❌ Отклонён' };
+          container.innerHTML = items.map(d => `
+            <div class="px-4 py-3 flex items-center gap-3">
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold">Пользователь #${d.user_id} — ${Number(d.amount).toFixed(0)} TJS</p>
+                <p class="text-xs text-slate-400">${d.method || '—'} · ${statusLabel[d.status] || d.status}</p>
+                ${d.receipt_b64 ? `<a href="${d.receipt_b64}" target="_blank" class="text-xs text-blue-400 hover:underline">Посмотреть чек</a>` : ''}
+              </div>
+              ${d.status === 'PENDING' ? `
+              <div class="flex gap-2 shrink-0">
+                <button onclick="adminDepositApprove(${d.id})" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold">✓</button>
+                <button onclick="adminDepositReject(${d.id})" class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold">✗</button>
+              </div>` : ''}
+            </div>
+          `).join('');
+        } catch { container.innerHTML = '<div class="px-4 py-4 text-center text-rose-400 text-xs">Ошибка соединения</div>'; }
+      };
+
+      window.adminDepositApprove = async (id) => {
+        const res = await fetch(`${API_BASE_URL}/api/admin/deposits/${id}/approve`, { method: 'POST' });
+        if (res.ok) { showToast('Депозит одобрен', 'success'); addAdminLog(`Deposit #${id} approved`); loadAdminDeposits(); }
+        else { showToast('Ошибка', 'error'); }
+      };
+
+      window.adminDepositReject = async (id) => {
+        const res = await fetch(`${API_BASE_URL}/api/admin/deposits/${id}/reject`, { method: 'POST' });
+        if (res.ok) { showToast('Депозит отклонён', 'error'); addAdminLog(`Deposit #${id} rejected`); loadAdminDeposits(); }
+        else { showToast('Ошибка', 'error'); }
+      };
+
+      // ── Admin Withdrawals ─────────────────────────────────────────────────
+      window.loadAdminWithdrawals = async () => {
+        const container = document.getElementById('adminWithdrawalsList');
+        if (!container) return;
+        container.innerHTML = '<div class="px-4 py-4 text-center text-slate-400 text-xs">Загрузка...</div>';
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/admin/withdrawals`);
+          if (!res.ok) { container.innerHTML = '<div class="px-4 py-4 text-center text-rose-400 text-xs">Ошибка загрузки</div>'; return; }
+          const items = await res.json();
+          if (!items.length) { container.innerHTML = '<div class="px-4 py-4 text-center text-slate-400 text-xs">Нет заявок</div>'; return; }
+          const statusLabel = { PENDING: '⏳ Ожидает', APPROVED: '✅ Выплачен', REJECTED: '❌ Отклонён' };
+          container.innerHTML = items.map(w => `
+            <div class="px-4 py-3 flex items-center gap-3">
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold">Пользователь #${w.user_id} — ${Number(w.amount).toFixed(0)} TJS</p>
+                <p class="text-xs text-slate-400">${escapeHTML(w.method || '—')} → ${escapeHTML(w.target || '—')} · ${statusLabel[w.status] || w.status}</p>
+              </div>
+              ${w.status === 'PENDING' ? `
+              <div class="flex gap-2 shrink-0">
+                <button onclick="adminWithdrawalApprove(${w.id})" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold">✓</button>
+                <button onclick="adminWithdrawalReject(${w.id})" class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold">✗</button>
+              </div>` : ''}
+            </div>
+          `).join('');
+        } catch { container.innerHTML = '<div class="px-4 py-4 text-center text-rose-400 text-xs">Ошибка соединения</div>'; }
+      };
+
+      window.adminWithdrawalApprove = async (id) => {
+        const res = await fetch(`${API_BASE_URL}/api/admin/withdrawals/${id}/approve`, { method: 'POST' });
+        if (res.ok) { showToast('Вывод одобрен', 'success'); addAdminLog(`Withdrawal #${id} approved`); loadAdminWithdrawals(); }
+        else { showToast('Ошибка', 'error'); }
+      };
+
+      window.adminWithdrawalReject = async (id) => {
+        const res = await fetch(`${API_BASE_URL}/api/admin/withdrawals/${id}/reject`, { method: 'POST' });
+        if (res.ok) { showToast('Вывод отклонён', 'error'); addAdminLog(`Withdrawal #${id} rejected`); loadAdminWithdrawals(); }
+        else { showToast('Ошибка', 'error'); }
       };
 
       // Рассылка
